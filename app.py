@@ -1,16 +1,15 @@
 import streamlit as st
 import os
 import tempfile
-import asyncio # YENİ EKLENDİ
+import asyncio
 
-# --- KRİTİK DÜZELTME: ASYNCIO DÖNGÜSÜ ---
-# Streamlit içinde "event loop" hatasını önleyen yama
+# --- ASYNCIO DÖNGÜSÜ YAMASI ---
 try:
     asyncio.get_running_loop()
 except RuntimeError:
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-# ----------------------------------------
+# ------------------------------
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_community.embeddings import HuggingFaceEmbeddings
@@ -72,11 +71,11 @@ if soru:
         st.warning("Önce belge yükleyin.")
     else:
         if api_key:
-            # DÜZELTME: transport='rest' ekleyerek bağlantıyı sadeleştirdik
+            # GÜNCELLENEN KISIM: Model ismi değişti
             llm = ChatGoogleGenerativeAI(
                 model="gemini-1.5-flash-latest", 
                 google_api_key=api_key, 
-                temperature=0.3,
+                temperature=0.3
             )
             
             prompt_template = """
@@ -100,4 +99,3 @@ if soru:
                     st.write(cevap)
                 except Exception as e:
                     st.error(f"Hata: {e}")
-
