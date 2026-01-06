@@ -1,8 +1,8 @@
 import streamlit as st
 import os
 import tempfile
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_community.embeddings import HuggingFaceEmbeddings # DEĞİŞİKLİK BURADA
 from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
@@ -12,36 +12,28 @@ from langchain.prompts import PromptTemplate
 # Sayfa Ayarları
 st.set_page_config(page_title="Orman Mevzuat Asistanı", layout="wide", page_icon="🌲")
 
-# Başlık ve Açıklama
 st.title("🌲 Orman Mevzuat Asistanı (AI)")
-st.markdown("""
-Bu asistan, **Google Gemini** altyapısını kullanarak yüklediğiniz ormancılık mevzuatını analiz eder.
-Yönetmelik, kanun veya tebliğ PDF'lerini yükleyin ve sorun.
-""")
+st.markdown("Yönetmelik PDF'lerini yükleyin ve sorun.")
 
-# Yan Menü (Sidebar) - Dosya Yükleme Alanı
+# Yan Menü
 st.sidebar.header("📁 Belge Yükle")
 
-# API Key Kontrolü
+# API Key Kontrolü (Sadece Chat için gerekli artık)
 if "GOOGLE_API_KEY" in st.secrets:
     api_key = st.secrets["GOOGLE_API_KEY"]
 else:
-    st.error("API Anahtarı bulunamadı. Lütfen Streamlit Secrets ayarlarını kontrol edin.")
+    st.error("API Anahtarı bulunamadı.")
     api_key = None
 
-uploaded_files = st.sidebar.file_uploader("Mevzuat PDF'lerini Buraya Sürükleyin", accept_multiple_files=True, type="pdf")
+uploaded_files = st.sidebar.file_uploader("PDF Yükle", accept_multiple_files=True, type="pdf")
+process_button = st.sidebar.button("Belgeleri İşle")
 
-# Buton
-process_button = st.sidebar.button("Belgeleri İşle ve Hazırla")
-
-# Ana Fonksiyonlar
 if process_button and uploaded_files:
     if not api_key:
-        st.error("Lütfen API anahtarınızı tanımlayın!")
+        st.error("API Anahtarı yok!")
     else:
-        with st.spinner("Belgeler taranıyor ve yapay zeka için hazırlanıyor..."):
+        with st.spinner("Belgeler işleniyor... (Bu işlem embedding modelini indirirken ilk seferde 1 dk sürebilir)"):
             documents = []
-            # PDF'leri geçici olarak kaydet ve oku
             for uploaded_file in uploaded_files:
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
                     temp_file.write(uploaded_file.read())
@@ -50,45 +42,37 @@ if process_button and uploaded_files:
                 loader = PyPDFLoader(temp_file_path)
                 docs = loader.load()
                 documents.extend(docs)
-                os.remove(temp_file_path) # Temizlik
+                os.remove(temp_file_path)
 
-            # Metinleri parçalara böl
             text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
             splits = text_splitter.split_documents(documents)
 
-            # Vektör Veritabanı Oluştur
-            embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=api_key)
-            vector_store = FAISS.from_documents(splits, embeddings)
+            # --- KRİTİK DEĞİŞİKLİK: Google yerine HuggingFace (Yerel) Embedding ---
+            embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+            # ---------------------------------------------------------------------
             
-            # Veritabanını oturuma kaydet
+            vector_store = FAISS.from_documents(splits, embeddings)
             st.session_state.vector_store = vector_store
-            st.success(f"Tamamlandı! Toplam {len(splits)} parçaya bölündü. Artık soru sorabilirsiniz.")
+            st.success(f"Tamamlandı! {len(splits)} parçaya bölündü.")
 
-# Soru Sorma Alanı
-soru = st.text_input("Mevzuat ile ilgili sorunuz nedir?", placeholder="Örn: 6831 sayılı kanuna göre işgal suçu nedir?")
+soru = st.text_input("Sorunuzu yazın:")
 
 if soru:
     if "vector_store" not in st.session_state:
-        st.warning("Lütfen önce sol menüden PDF yükleyin ve 'İşle' butonuna basın.")
+        st.warning("Önce belge yükleyin.")
     else:
         if api_key:
-            # Model Ayarları
+            # Cevaplama için hala Google Gemini kullanıyoruz (Bu kısım hatasızdı)
             llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", google_api_key=api_key, temperature=0.3)
             
-            # Özel Prompt
             prompt_template = """
-            Sen uzman bir Orman Mühendisi asistanısın. Aşağıdaki bağlamı (context) kullanarak kullanıcının sorusunu cevapla.
-            Cevap verirken ilgili kanun maddesine veya yönetmelik bölümüne atıf yapmaya çalış.
-            Eğer bilgi metinlerde yoksa "Bu bilgi yüklenen belgelerde bulunamadı" de.
-            
+            Sen uzman bir Orman Mühendisi asistanısın.
             Bağlam: {context}
             Soru: {question}
-            
             Cevap:
             """
             PROMPT = PromptTemplate(template=prompt_template, input_variables=["context", "question"])
             
-            # Zinciri Kurma
             qa_chain = RetrievalQA.from_chain_type(
                 llm=llm,
                 chain_type="stuff",
@@ -96,11 +80,9 @@ if soru:
                 chain_type_kwargs={"prompt": PROMPT}
             )
             
-            with st.spinner("Mevzuat taranıyor..."):
+            with st.spinner("Cevap hazırlanıyor..."):
                 try:
                     cevap = qa_chain.run(soru)
-                    st.write("### 🤖 Asistanın Cevabı:")
                     st.write(cevap)
                 except Exception as e:
-                    st.error(f"Bir hata oluştu: {e}")
-
+                    st.error(f"Hata: {e}")
