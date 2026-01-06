@@ -4,7 +4,7 @@ import tempfile
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_community.document_loaders import PyPDFLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain.chains import RetrievalQA
 from langchain.prompts import PromptTemplate
@@ -92,4 +92,5 @@ if soru:
         with st.spinner("Mevzuat taranıyor..."):
             cevap = qa_chain.run(soru)
             st.write("### 🤖 Asistanın Cevabı:")
+
             st.write(cevap)
