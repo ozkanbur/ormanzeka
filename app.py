@@ -74,10 +74,9 @@ if soru:
         if api_key:
             # DÜZELTME: transport='rest' ekleyerek bağlantıyı sadeleştirdik
             llm = ChatGoogleGenerativeAI(
-                model="gemini-1.5-flash", 
+                model="gemini-1.5-flash-latest", 
                 google_api_key=api_key, 
                 temperature=0.3,
-                transport="rest" 
             )
             
             prompt_template = """
@@ -101,3 +100,4 @@ if soru:
                     st.write(cevap)
                 except Exception as e:
                     st.error(f"Hata: {e}")
+
