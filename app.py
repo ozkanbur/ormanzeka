@@ -57,7 +57,7 @@ if process_button and uploaded_files:
             splits = text_splitter.split_documents(documents)
 
             # Vektör Veritabanı Oluştur
-            embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001", google_api_key=api_key)
+            embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=api_key)
             vector_store = FAISS.from_documents(splits, embeddings)
             
             # Veritabanını oturuma kaydet
@@ -103,3 +103,4 @@ if soru:
                     st.write(cevap)
                 except Exception as e:
                     st.error(f"Bir hata oluştu: {e}")
+
