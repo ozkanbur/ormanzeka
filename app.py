@@ -1,8 +1,19 @@
 import streamlit as st
 import os
 import tempfile
+import asyncio # YENİ EKLENDİ
+
+# --- KRİTİK DÜZELTME: ASYNCIO DÖNGÜSÜ ---
+# Streamlit içinde "event loop" hatasını önleyen yama
+try:
+    asyncio.get_running_loop()
+except RuntimeError:
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+# ----------------------------------------
+
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_community.embeddings import HuggingFaceEmbeddings # DEĞİŞİKLİK BURADA
+from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
@@ -18,7 +29,7 @@ st.markdown("Yönetmelik PDF'lerini yükleyin ve sorun.")
 # Yan Menü
 st.sidebar.header("📁 Belge Yükle")
 
-# API Key Kontrolü (Sadece Chat için gerekli artık)
+# API Key Kontrolü
 if "GOOGLE_API_KEY" in st.secrets:
     api_key = st.secrets["GOOGLE_API_KEY"]
 else:
@@ -32,7 +43,7 @@ if process_button and uploaded_files:
     if not api_key:
         st.error("API Anahtarı yok!")
     else:
-        with st.spinner("Belgeler işleniyor... (Bu işlem embedding modelini indirirken ilk seferde 1 dk sürebilir)"):
+        with st.spinner("Belgeler işleniyor... (İlk seferde model indirildiği için 1-2 dk sürebilir)"):
             documents = []
             for uploaded_file in uploaded_files:
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
@@ -47,9 +58,8 @@ if process_button and uploaded_files:
             text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
             splits = text_splitter.split_documents(documents)
 
-            # --- KRİTİK DEĞİŞİKLİK: Google yerine HuggingFace (Yerel) Embedding ---
+            # HuggingFace Embedding (Yerel ve Ücretsiz)
             embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-            # ---------------------------------------------------------------------
             
             vector_store = FAISS.from_documents(splits, embeddings)
             st.session_state.vector_store = vector_store
@@ -62,8 +72,13 @@ if soru:
         st.warning("Önce belge yükleyin.")
     else:
         if api_key:
-            # Cevaplama için hala Google Gemini kullanıyoruz (Bu kısım hatasızdı)
-            llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", google_api_key=api_key, temperature=0.3)
+            # DÜZELTME: transport='rest' ekleyerek bağlantıyı sadeleştirdik
+            llm = ChatGoogleGenerativeAI(
+                model="gemini-1.5-flash", 
+                google_api_key=api_key, 
+                temperature=0.3,
+                transport="rest" 
+            )
             
             prompt_template = """
             Sen uzman bir Orman Mühendisi asistanısın.
